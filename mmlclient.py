@@ -35,20 +35,21 @@ MMLD_WORKER     = 1 #D->C | [pid]                   #daemon responds with the ne
 MMLD_START      = 2 #C->D | [pid] [string]          #client signals worker to start a program with a string arg
 MMLD_STOP       = 3 #C->D | [pid]                   #client signals the worker to stop
 MMLD_PAUSE      = 4 #C->D | [pid]                   #client signals the worker to pause
-MMLD_STDOUT     = 5 #D->C | [pid] [string]          #daemon sends client a worker's stdout data
-MMLD_STDERR     = 6 #D->C | [pid] [string]          #daemon sends client a worker's stderr data
 MMLD_DISCONNECT = 7 #C->D |                         #client notifies daemon it is disconnecting
 MMLD_ERROR      = 8 #D->C | [string]                #daemon encountered an error and must terminate the connection
 MMLD_KILL       = 9 #C->D | [pid]                   #client requests a worker process be terminated
+MMLD_FINISHED   =10 #D->C | [pid]                   #daemon notifies client that a script has terminated
+MMLD_DEBUG      =11 #D->C | [pid] [string]          #daemon sends client the debug from a worker
 
 #type codes for ScriptRunner types
 MMLD_PS         = 0 #pascalscript
 MMLD_PY         = 1 #python
+MMLD_CPAS       = 2 #python
 
 socket = socket(AF_INET,SOCK_STREAM)
 socket.connect(('localhost', 8000))
 
-socket.send(pack('=BB',MMLD_SPAWN,MMLD_PY))
+socket.send(pack('=BB',MMLD_SPAWN,MMLD_CPAS))
 while True:
     try:
         (code,) = unpack('=B',socket.recv(1))
@@ -56,22 +57,23 @@ while True:
             (pid,) = unpack('=i',socket.recv(4))
             #begin test code            
             print 'Worker Created:',pid
-            program = 'lol, a program'
+            program = 'program new; var x: integer; begin x:= 1 + 2 end.'
+            print 'Starting a Script:',pid
             socket.send(pack('=Bii'+str(len(program))+'s',MMLD_START,pid,len(program),program))
             #socket.send(pack('=Bi',MMLD_KILL,pid))
             #end test code
-        elif code == MMLD_STDOUT:
+        elif code == MMLD_DEBUG:
             (pid,size) = unpack('=ii',socket.recv(8))
             (msg,) = unpack('='+str(size)+'s',socket.recv(size))
             print '<'+str(pid)+'>', msg
-        elif code == MMLD_STDERR:
-            (pid,size) = unpack('=ii',socket.recv(8))
-            (msg,) = unpack('='+str(size)+'s',socket.recv(size))
-            print '{'+str(pid)+'}', msg
         elif code == MMLD_ERROR:
             (size,) = unpack('=i',socket.recv(4))
             (why,) = unpack('='+str(size)+'s',socket.recv(size))
             raise Exception(why)
+        elif code == MMLD_FINISHED:
+            (pid,) = unpack('=i',socket.recv(4))
+            print 'Script Terminated:',pid
+            raise Exception('Finished')
         else:
             raise Exception('Unknown Daemon Command: ' + str(code))
     except error:
